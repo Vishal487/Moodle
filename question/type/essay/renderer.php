@@ -33,6 +33,9 @@ defined('MOODLE_INTERNAL') || die();
  * @copyright  2009 The Open University
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
+/**
+ * @updatedby Tausif Iqbal and Vishal Rao
+ */
 class qtype_essay_renderer extends qtype_renderer {
     public function formulation_and_controls(question_attempt $qa,
             question_display_options $options) {
@@ -71,12 +74,17 @@ class qtype_essay_renderer extends qtype_renderer {
         }
 
         $files = '';
+        // It will contain the HTML script corressponding to annotated pdf files
+        $annotatedfiles = "";  // changes made
         if ($question->attachments) {
             if (empty($options->readonly)) {
                 $files = $this->files_input($qa, $question->attachments, $options);
 
             } else {
                 $files = $this->files_read_only($qa, $options);
+
+                // HTML script corressponding to annotated pdf files
+                $annotatedfiles = $this->feedback_files_read_only($qa,$options);  // changes made
             }
         }
 
@@ -93,9 +101,92 @@ class qtype_essay_renderer extends qtype_renderer {
                 $question->get_validation_error($step->get_qt_data()), ['class' => 'validationerror']);
         }
         $result .= html_writer::tag('div', $files, array('class' => 'attachments'));
+        // changes made
+        if(!empty($annotatedfiles))
+        {
+            $result .= '<hr style="height:1px;border:none;color:#333;background-color:#333;">';
+            $result .= '<p> <b> Corrected Documents </b> </p>';
+            $result .= html_writer::tag('div', $annotatedfiles, array('class' => 'attachments'));   // adding annotated file.
+        }
         $result .= html_writer::end_tag('div');
 
         return $result;
+    }
+
+    /**
+     * @author Tausif Iqbal, Vishal Rao
+     * Displays any submitted feedback (annotated) files when the question is in read-only mode.
+     * @param question_attempt $qa the question attempt to display.
+     * @param question_display_options $options controls what should and should
+     *      not be displayed. Used to get the context.
+     */
+    public function feedback_files_read_only(question_attempt $qa, question_display_options $options) {
+        $contextID = $options->context->id;
+        $component = 'question';
+        $filearea = 'response_attachments';
+        $filepath = '/';
+        $itemid = $options->questionreviewlink->get_param('attempt');  // attempt_id
+        $filenames = $this->get_filenames($qa, $options);
+
+        $annotatedfiles = "";
+        foreach($filenames as $filename)
+        {
+            $fileurl = "";
+            $fs = get_file_storage();
+            $doesExists = $fs->file_exists($contextID, $component, $filearea, $itemid, $filepath, $filename);
+            if($doesExists === true)
+            {
+                $file = $fs->get_file($contextID, $component, $filearea, $itemid, $filepath, $filename);
+                $temp = file_encode_url(new moodle_url('/pluginfile.php'), '/' . implode('/', array(
+                    $file->get_contextid(),
+                    $file->get_component(),
+                    $file->get_filearea(),
+                    $qa->get_usage_id(),
+                    $qa->get_slot(),
+                    $file->get_itemid())) .
+                    $file->get_filepath() . $file->get_filename(), true);
+                $fileurl = $temp;
+            }
+            if(!empty($fileurl) && !empty($filename))
+            {
+                $annotatedfiles .= '<p><a href="' . $fileurl . '"><img class="icon icon" alt="PDF document" title="PDF document" src="http://localhost/moodle/theme/image.php/boost/core/1644642657/f/pdf" />' . 'Feedback_' . $filename  . '</a></p>';
+            }
+        }
+        return $annotatedfiles;
+    }
+
+    /**
+     * @author Tausif Iqbal, Vishal Rao
+     * Returns filename of any attached file.
+     * @param question_attempt $qa the question attempt to display.
+     * @param question_display_options $options controls what should and should
+     *      not be displayed. Used to get the context.
+     */
+    public function get_filenames(question_attempt $qa, question_display_options $options) {
+        $files = $qa->get_last_qt_files('attachments', $options->context->id);
+        $slot = $qa->get_slot();
+        $names = array();
+        foreach ($files as $file) {
+            $temp = $qa->get_response_file_url($file);
+            $url = (explode("?", $temp))[0];
+            $name = end((explode("/", $url)));
+            $name = urldecode($name);
+
+            // mimetype and format
+            $mime = $file->get_mimetype();
+            $mimetype = (explode("/", $mime))[0];
+            $format = end(explode("/", $mime));
+
+            // achanging filename, similar to annotator.php
+            $name = implode("_", explode(".", $name)) . "_" . $slot . "." . $format;
+            // check if format is not PDF, then change the filename as file_topdf.pdf
+            if($format != "pdf")
+            {
+                $name = (explode(".", $name))[0] . "_" . $format . "_topdf.pdf";
+            }
+            $names[] = $name;
+        }
+        return $names;
     }
 
     /**

@@ -109,11 +109,58 @@ if (data_submitted() && confirm_sesskey()) {
 // Print quiz information.
 echo $output->review_summary_table($summarydata, 0);
 
+// Tausif Iqbal, Vishal Rao works start here...
 // Print the comment form.
-echo '<form method="post" class="mform" id="manualgradingform" action="' .
+// storing these into variable so that we can first print the dropdown and then all these questions for commenting
+$comment_form = '<form method="post" class="mform" id="manualgradingform" action="' .
         $CFG->wwwroot . '/mod/quiz/comment.php">';
-echo $attemptobj->render_question_for_commenting($slot);
+$que_for_commenting = $attemptobj->render_question_for_commenting($slot);
+
+// we need $qa and $options to get all files submitted by student
+$qa = $attemptobj->get_question_attempt($slot);
+$options = $attemptobj->get_display_options(true);
+
+// get all the files
+$files = $qa->get_last_qt_files('attachments', $options->context->id);
+
+// creating html form, it will send required data (attempt id, slot, and file number) to annotator.php file
+$form = '<form action="./annotator.php" method="post">
+        <input type="hidden" value="' . $attemptid . '" name="attempt">
+        <input type="hidden" value="' . $slot . '" name="slot">';
+
+// the dropdown; it will be a part of above form; 
+// it will let teacher select which file to annotate
+$dropdown = '<select id="dropdown" name="fileno" class="custom-select">';
+$fileno = 0;  // file number (note that it starts with 1 not 0)
+foreach ($files as $file) {
+    $fileno = $fileno + 1;
+    $out = $qa->get_response_file_url($file);
+    $url = (explode("?", $out))[0];       // remove ?forcedownload=1 from the end of the url
+    $filename = end(explode('/', $url));  // split based on "/" and take last element; this would be filename
+    $filename = urldecode($filename);
+    $dropdown .= '<option value="' . $fileno . '">' . $filename . '</option>';
+}
+$dropdown .= '</select>';
+$form .= $dropdown;
+$form .= '<input type="submit" class="btn btn-primary" value="Annotate" style="margin: 5px;">
+       </form>';
+
+// rendering html form only when there is at least one file.
+if($fileno > 0)
+{   
+    $div = '<div style="margin-left: 126px">' . 
+            $form . 
+            '</div>';
+    echo $div;
+}
+
+// rendering questions
+echo $comment_form;
+echo $que_for_commenting;
+
 ?>
+<!-- Tausif Iqbal, Vishal Rao works end here... -->
+
 <div>
     <input type="hidden" name="attempt" value="<?php echo $attemptobj->get_attemptid(); ?>" />
     <input type="hidden" name="slot" value="<?php echo $slot; ?>" />
